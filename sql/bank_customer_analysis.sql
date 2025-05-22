@@ -1,0 +1,159 @@
+/* Indicatori di base */
+
+-- 1. Età del cliente -- 
+
+
+create temporary table banca.eta_cliente as
+(select *, timestampdiff(year, data_nascita, current_date()) as eta from banca.cliente);
+
+-----------------------------------------------------
+
+/* 
+Indicatori sulle transazioni 
+In questa sezioni le informazioni vengono tutte prese dalle tabelle transazioni e conto. Per cui è possibile fare la join una volta sola e usare le case when per calcolare le singole feature.
+*/
+create temporary table banca.riepilogo_transazioni as
+(select 
+cliente.id_cliente,
+
+-- 2. Numero di transazioni in uscita --
+sum(case when id_tipo_trans in (3,4,5,6,7) then 1 else 0 end) as n_transazioni_uscita,
+
+-- 3. Numero di transazioni in entrata --
+sum(case when id_tipo_trans in (0,1,2) then 1 else 0 end) as n_transazioni_entrata,
+
+-- 4.Importo totale transato in uscita su tutti i conti --
+sum(case when id_tipo_trans in (3,4,5,6,7) then trans.importo else 0 end) as importo_totale_uscita,
+
+-- 5. Importo totale transato in entrata su tutti i conti --
+sum(case when id_tipo_trans in (0,1,2) then trans.importo else 0 end) as importo_totale_entrata
+
+from banca.cliente cliente
+left join banca.conto conto on cliente.id_cliente = conto.id_cliente
+left join banca.transazioni trans on conto.id_conto = trans.id_conto
+group by 1 order by 1);
+
+------------------------------------------------------------------------------------------------
+
+/* Indicatori sui conti */
+
+
+-- 6. Numero totale di conti posseduti 
+-- In questo caso è stato necessario fare il join della tabella cliente (che aveva meno record), altrimenti sarebbero andati persi gli id_cliente che non hanno conti.
+
+create temporary table banca.n°_totale_conti
+(select 
+cliente.id_cliente, count(id_conto) as numero_di_conti_posseduti
+from 
+banca.conto as conto
+right join banca.cliente as cliente
+on conto.id_cliente=cliente.id_cliente
+group by 1
+order by 1);
+
+-- 7. Numero di conti posseduti per tipologia (un indicatore per ogni tipo di conto).
+
+create temporary table banca.n_totale_conti_tipologia as 
+(select
+cliente.id_cliente, 
+sum(case when desc_tipo_conto= "Conto Base" then 1 else 0 end) as n_Conti_Base,
+sum(case when desc_tipo_conto= "Conto Business" then 1 else 0 end) as n_Conti_Business,
+sum(case when desc_tipo_conto= "Conto Privati" then 1 else 0 end) as n_Conti_Privati,
+sum(case when desc_tipo_conto= "Conto Famiglie" then 1 else 0 end) as n_Conti_Famiglie   
+from 
+banca.cliente as cliente
+left join banca.conto as conto on cliente.id_cliente = conto.id_cliente
+left join banca.tipo_conto as tipo_conto on conto.id_tipo_conto=tipo_conto.id_tipo_conto
+group by 1 order by 1);
+
+------------------------------------------------------------------------------------------------
+
+/* Indicatori sulle transazioni per tipologia di conto */
+
+create temporary table banca.riepilogo_transazioni_tipologia_conto as
+(select 
+cliente.id_cliente, 
+
+-- 8.Numero di transazioni in uscita per tipologia di conto (un indicatore per tipo di conto) --
+sum(case when desc_tipo_conto= "Conto Base" and id_tipo_trans in (3,4,5,6,7) then 1 else 0 end) as n_transazioni_uscita_Conti_Base,
+sum(case when desc_tipo_conto= "Conto Business" and id_tipo_trans in (3,4,5,6,7) then 1 else 0 end) as n_transazioni_uscita_Conti_Business,
+sum(case when desc_tipo_conto= "Conto Privati" and id_tipo_trans in (3,4,5,6,7) then 1 else 0 end) as n_transazioni_uscita_Conti_Privati,
+sum(case when desc_tipo_conto= "Conto Famiglie" and id_tipo_trans in (3,4,5,6,7) then 1 else 0 end) as n_transazioni_uscita_Conti_Famiglie,
+
+-- 9.Numero di transazioni in entrata per tipologia di conto (un indicatore per tipo di conto) --
+sum(case when desc_tipo_conto= "Conto Base" and id_tipo_trans in (0,1,2) then 1 else 0 end) as n_transazioni_entrata_Conti_Base,
+sum(case when desc_tipo_conto= "Conto Business" and id_tipo_trans in (0,1,2) then 1 else 0 end) as n_transazioni_entrata_Conti_Business,
+sum(case when desc_tipo_conto= "Conto Privati" and id_tipo_trans in (0,1,2) then 1 else 0 end) as n_transazioni_entrata_Conti_Privati,
+sum(case when desc_tipo_conto= "Conto Famiglie" and id_tipo_trans in (0,1,2) then 1 else 0 end) as n_transazioni_entrata_Conti_Famiglie,
+
+-- 10. Importo transato in uscita per tipologia di conto (un indicatore per tipo di conto).
+sum(case when desc_tipo_conto="Conto Base" and id_tipo_trans in (3,4,5,6,7) then importo else 0 end) as totale_transato_uscita_Conto_Base,
+sum(case when desc_tipo_conto="Conto Business" and id_tipo_trans in (3,4,5,6,7) then importo else 0 end) as totale_transato_uscita_Conto_Business,
+sum(case when desc_tipo_conto="Conto Privati" and id_tipo_trans in (3,4,5,6,7) then importo else 0 end) as totale_transato_uscita_Conto_Privati,
+sum(case when desc_tipo_conto="Conto Famiglie" and id_tipo_trans in (3,4,5,6,7) then importo else 0 end) as totale_transato_uscita_Conto_Famiglie,
+
+-- 11. Importo transato in entrata per tipologia di conto (un indicatore per tipo di conto).
+sum(case when desc_tipo_conto="Conto Base" and id_tipo_trans in (0,1,2) then importo else 0 end) as totale_transato_entrata_Conto_Base,
+sum(case when desc_tipo_conto="Conto Business" and id_tipo_trans in (0,1,2) then importo else 0 end) as totale_transato_entrata_Conto_Business,
+sum(case when desc_tipo_conto="Conto Privati" and id_tipo_trans in (0,1,2) then importo else 0 end) as totale_transato_entrata_Conto_Privati,
+sum(case when desc_tipo_conto="Conto Famiglie" and id_tipo_trans in (0,1,2) then importo else 0 end) as totale_transato_entrata_Conto_Famiglie
+   
+from 
+banca.cliente as cliente
+left join banca.conto as conto
+on cliente.id_cliente=conto.id_cliente
+left join banca.transazioni as trans
+on conto.id_conto = trans.id_conto
+left join banca.tipo_conto as tipo_conto
+on conto.id_tipo_conto=tipo_conto.id_tipo_conto
+group by 1 order by 1);
+
+------------------------------------------------------------------------------------------------
+
+/* Creazione della tabella finale */
+
+select 
+eta_cliente.*,
+
+riepilogo_transazioni.n_transazioni_uscita,
+riepilogo_transazioni.n_transazioni_entrata,
+riepilogo_transazioni.importo_totale_uscita,
+riepilogo_transazioni.importo_totale_entrata,
+
+tot_conti.numero_di_conti_posseduti,
+
+tot_conti_tipo.n_Conti_Base,
+tot_conti_tipo.n_Conti_Business,
+tot_conti_tipo.n_Conti_Privati,
+tot_conti_tipo.n_Conti_Famiglie,
+
+riepilogo_transazioni_conto.n_transazioni_uscita_Conti_Base,
+riepilogo_transazioni_conto.n_transazioni_uscita_Conti_Business,
+riepilogo_transazioni_conto.n_transazioni_uscita_Conti_Privati,
+riepilogo_transazioni_conto.n_transazioni_uscita_Conti_Famiglie,
+
+riepilogo_transazioni_conto.n_transazioni_entrata_Conti_Base,
+riepilogo_transazioni_conto.n_transazioni_entrata_Conti_Business,
+riepilogo_transazioni_conto.n_transazioni_entrata_Conti_Privati,
+riepilogo_transazioni_conto.n_transazioni_entrata_Conti_Famiglie,
+
+riepilogo_transazioni_conto.totale_transato_uscita_Conto_Base,
+riepilogo_transazioni_conto.totale_transato_uscita_Conto_Business,
+riepilogo_transazioni_conto.totale_transato_uscita_Conto_Privati,
+riepilogo_transazioni_conto.totale_transato_uscita_Conto_Famiglie,
+
+riepilogo_transazioni_conto.totale_transato_entrata_Conto_Base,
+riepilogo_transazioni_conto.totale_transato_entrata_Conto_Business,
+riepilogo_transazioni_conto.totale_transato_entrata_Conto_Privati,
+riepilogo_transazioni_conto.totale_transato_entrata_Conto_Famiglie
+from
+banca.eta_cliente as eta_cliente
+inner join 
+banca.riepilogo_transazioni as riepilogo_transazioni
+on eta_cliente.id_cliente=riepilogo_transazioni.id_cliente
+inner join banca.n°_totale_conti as tot_conti
+on riepilogo_transazioni.id_cliente=tot_conti.id_cliente
+inner join banca.n_totale_conti_tipologia as tot_conti_tipo
+on tot_conti.id_cliente=tot_conti_tipo.id_cliente
+inner join banca.riepilogo_transazioni_tipologia_conto as riepilogo_transazioni_conto
+on tot_conti_tipo.id_cliente=riepilogo_transazioni_conto.id_cliente
